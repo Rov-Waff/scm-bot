@@ -13,7 +13,7 @@ use log::info;
 use reqwest::ClientBuilder;
 use std::{sync::Arc, time::Duration};
 
-use crate::entity::identity;
+use crate::utils::identity;
 
 #[tokio::main]
 async fn main() {
