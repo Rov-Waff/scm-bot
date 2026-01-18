@@ -1,5 +1,5 @@
 /* 模块抽象定义 */
-pub mod entity {
+pub mod utils {
     pub mod identity;
 }
 
