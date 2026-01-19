@@ -44,8 +44,10 @@ async fn main() {
     let client = Arc::new(client);
 
     loop {
-        let get_poi = poi::get_poi(client.clone(), stroage.clone());
-        tokio::join!(get_poi);
+        // 现在 `get_poi` 返回 `anyhow::Result<()>`，在此处 await 并记录错误
+        if let Err(e) = poi::get_poi(client.clone(), stroage.clone()).await {
+            log::error!("get_poi failed: {:?}", e);
+        }
         tokio::time::sleep(Duration::from_secs(60)).await; //每轮loop结束后等待一分钟后开下一轮
     }
 }
