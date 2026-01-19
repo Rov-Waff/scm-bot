@@ -6,6 +6,11 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
+pub enum Mark {
+    UnProcessed(u32),
+    Processed,
+}
+
 /// 响应结构：包含一个帖子 ID 的列表（字符串形式）
 ///
 /// 示例 JSON: {"items": ["123", "456"]}
