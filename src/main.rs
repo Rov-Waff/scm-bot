@@ -43,10 +43,9 @@ async fn main() {
     let stroage = Arc::new(Mutex::new(stroage));
     let client = Arc::new(client);
 
-    
-    let get_poi = poi::get_poi(client.clone(), stroage.clone());
-    tokio::join!(get_poi);
-    loop{
-        
-    }
+    loop {
+        let get_poi = poi::get_poi(client.clone(), stroage.clone());
+        tokio::join!(get_poi);
+        tokio::time::sleep(Duration::from_secs(60)).await;//每轮loop结束后等待一分钟后开下一轮
+    };
 }

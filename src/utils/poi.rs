@@ -62,13 +62,15 @@ pub(crate) async fn get_poi(client: Arc<Client>, stroage: Arc<Mutex<Stroage>>) {
                                 // 将字符串 ID 解析为 u32；解析失败时记录错误并跳过
                                 match i.trim().parse::<u32>() {
                                     Ok(id) => {
-                                        // 如果该 id 未被 processed_poi 标记，则推入 poi 列表
-                                        match stro.processed_poi.contains(&id) {
-                                            true => {
+                                        // 如果该 id 未被 processed_poi/poi 标记，则推入 poi 列表
+                                        match stro.processed_poi.contains(&id)
+                                            || stro.poi.contains(&id)
+                                        {
+                                            false => {
                                                 stro.poi.push(id);
                                                 debug!("get_poi: 推入项 #{} id={}", idx, id);
                                             }
-                                            false => {
+                                            true => {
                                                 debug!("get_poi: {:?} 已存在，不在推入", id)
                                             }
                                         };
