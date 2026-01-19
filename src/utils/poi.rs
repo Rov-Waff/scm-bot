@@ -36,14 +36,13 @@ pub(crate) async fn get_poi(
 ) -> Result<()> {
     info!("get_poi: 开始");
 
-    // 在发送请求前短暂获取锁以克隆需要的 token，避免在 await 期间持有锁
     let token = {
         let stro = stroage.lock().await;
         info!("get_poi: 克隆 token (长度={})", stro.token.len());
         stro.token.clone()
     };
     let mut redis_cli = redis_client.lock().await;
-    info!("get_poi: 向 codemao 热门接口发送请求");
+    info!("get_poi: 向热门接口发送请求");
     let r = client
         .get("https://api.codemao.cn/web/forums/posts/hots/all")
         .header("Cookie", format!("authorization={}", token))
