@@ -1,9 +1,12 @@
 use std::sync::Arc;
+use std::time::SystemTime;
+use std::time::UNIX_EPOCH;
 
 use crate::Stroage;
 use anyhow::Context;
 use anyhow::Result;
-use log::{debug, error, info};
+use log::info;
+use redis::TypedCommands as _;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
@@ -26,7 +29,11 @@ struct PostListResponse {
 // 方法: GET
 
 /// 从 CodeMao 热门接口拉取帖子 ID 列表，并将未处理的 ID 推入共享的 `Stroage.poi`。
-pub(crate) async fn get_poi(client: Arc<Client>, stroage: Arc<Mutex<Stroage>>) -> Result<()> {
+pub(crate) async fn get_poi(
+    client: Arc<Client>,
+    stroage: Arc<Mutex<Stroage>>,
+    redis_client: Arc<Mutex<redis::Connection>>,
+) -> Result<()> {
     info!("get_poi: 开始");
 
     // 在发送请求前短暂获取锁以克隆需要的 token，避免在 await 期间持有锁
@@ -35,7 +42,7 @@ pub(crate) async fn get_poi(client: Arc<Client>, stroage: Arc<Mutex<Stroage>>) -
         info!("get_poi: 克隆 token (长度={})", stro.token.len());
         stro.token.clone()
     };
-
+    let mut redis_cli = redis_client.lock().await;
     info!("get_poi: 向 codemao 热门接口发送请求");
     let r = client
         .get("https://api.codemao.cn/web/forums/posts/hots/all")
@@ -43,35 +50,23 @@ pub(crate) async fn get_poi(client: Arc<Client>, stroage: Arc<Mutex<Stroage>>) -
         .send()
         .await
         .context("get_poi: 请求失败")?;
-
-    info!("get_poi: 已收到响应 (状态={})", r.status());
-
-    let text = r.text().await.context("get_poi: 读取响应文本失败")?;
-    debug!("get_poi: 响应文本长度={}", text.len());
-
-    let list: PostListResponse = serde_json::from_str(&text)
-        .context("get_poi: JSON 反序列化失败")?;
-
-    info!("get_poi: 解析到的项数量={}", list.items.len());
-    let mut stro = stroage.lock().await;
-    let before = stro.poi.len();
-    for (idx, i) in list.items.into_iter().enumerate() {
-        match i.trim().parse::<u32>() {
-            Ok(id) => {
-                if !(stro.processed_poi.contains(&id) || stro.poi.contains(&id)) {
-                    stro.poi.push(id);
-                    debug!("get_poi: 推入项 #{} id={}", idx, id);
-                } else {
-                    debug!("get_poi: {} 已存在，不在推入", id)
-                }
-            }
-            Err(e) => {
-                error!("get_poi: 在索引 {} 解析 id 失败: {:?}", idx, e);
-            }
+    let r = r.json::<PostListResponse>().await?.items;
+    for i in r {
+        // 判断是否存在于 `poi` 或 `processed_poi` 集合
+        let in_poi = redis_cli.zrank("poi", &i).ok().flatten().is_some();
+        let in_processed = redis_cli
+            .zrank("processed_poi", &i)
+            .ok()
+            .flatten()
+            .is_some();
+        if in_poi || in_processed {
+            info!("id:{:?} 已存在，不推入Redis", &i);
+        } else {
+            // 不存在则送进 poi 集合，member 为帖子ID，score 为当前时间戳+86400
+            let expr_time = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+            redis_cli.zadd("poi", &i, expr_time + 86400)?;
+            info!("ID:{:?} 已推入Redis", &i);
         }
     }
-    debug!("get_poi: poi 大小 原={} 现={}", before, stro.poi.len());
-    info!("get_poi: 完成，poi 总数={}", stro.poi.len());
-
     Ok(())
 }

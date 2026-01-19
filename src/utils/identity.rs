@@ -75,7 +75,7 @@ Auth Example:
   "user_info": {
     "id": 2615505,
     "nickname": "xiaole233",
-    "avatar_url": "https://cdn-community.bcmcdn.com/47/community/d2ViXzEwMDFfMjYxNTUwNV8yNjE1NTA1XzE3NDczOTU2NzM5MjlfNDY0NWQwZDM.png",
+    "avatar_url": "https://cdn-community.bcmcdn.com/47/community/d2ViXzEwMDFfM  jYxNTUwNV8yNjE1NTA1XzE3NDczOTU2NzM5MjlfNDY0NWQwZDM.png",
     "fullname": "",
     "birthday": ,
     "sex": 1,
