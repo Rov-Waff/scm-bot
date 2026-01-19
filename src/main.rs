@@ -1,11 +1,14 @@
 /* 模块抽象定义 */
 pub mod utils {
     pub mod identity;
+    pub mod posts;//帖子相关
+    pub mod poi;//帖子兴趣点相关
 }
 
 struct Stroage {
     ticket_id: String,
-    token:String
+    token:String,
+
 }
 
 use dotenvy::dotenv;
@@ -32,4 +35,5 @@ async fn main() {
     info!("成功获取token:{}",&stroage.token);
     //包进Arc,异步使用
     let stroage = Arc::new(stroage);
+    
 }
