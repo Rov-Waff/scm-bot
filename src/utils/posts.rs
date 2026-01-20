@@ -1,4 +1,5 @@
-use log::error;
+use log::{debug, error, info};
+use redis::TypedCommands;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -51,6 +52,19 @@ async fn get_post(
     stroage: Arc<Mutex<Stroage>>,
 ) -> Option<GetPostResponse> {
     let stro = stroage.lock().await;
+    let req = client
+        .get(format!(
+            "https://api.codemao.cn/web/forums/posts/{}/details",
+            id
+        ))
+        .header("Cookie", format!("authorization={}", stro.token))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+    debug!("Response Text: {}", req);
     match client
         .get(format!(
             "https://api.codemao.cn/web/forums/posts/{}/details",
@@ -62,8 +76,8 @@ async fn get_post(
     {
         Ok(r) => match r.json::<GetPostResponse>().await {
             Ok(r) => Some(r),
-            Err(_) => {
-                error!("无法序列化,id:{:?}", id);
+            Err(e) => {
+                error!("无法序列化,id:{:?},Error:{:?}", id, e);
                 None
             }
         },
@@ -74,6 +88,48 @@ async fn get_post(
     }
 }
 
-pub async fn consume_poi(client: Arc<Client>, stroage: Arc<Mutex<Stroage>>,redis_client:Arc<Mutex<redis::Connection>>) {
-    
+pub(crate) async fn consume_poi(
+    client: Arc<Client>,
+    stroage: Arc<Mutex<Stroage>>,
+    redis_client: Arc<Mutex<redis::Connection>>,
+) {
+    let mut redis_client = redis_client.lock().await;
+    //从poi这个ZSET中弹出一个元素，这个元素为帖子ID
+    let id: Option<u32> = match redis_client.zpopmin("poi", 1) {
+        Ok(r) => r
+            .get(0)
+            .map(|entry| entry.parse::<u32>().unwrap()),
+        Err(e) => {
+            error!("无法从poi集合中弹出元素，Error:{:?}", e);
+            return;
+        }
+    };
+    match id {
+        Some(id) => {
+            match get_post(client, id, stroage).await {
+                Some(post) => {
+                    info!("获取到帖子:id:{},标题:{}", post.id, post.title);
+                    //消费逻辑
+                }
+                None => {
+                    error!("无法获取帖子详情,id:{}", id);
+                }
+            }
+        }
+        None => {
+            info!("当前没有可处理的帖子ID");
+        }
+    }
+    //完成消费，将ID加入processed_poi集合，分数为当前时间戳+86400
+    if let Some(id) = id {
+        let score = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as f64
+            + 86400.0;
+        let _ = redis_client
+            .zadd("processed_poi", id.to_string(), score)
+            .unwrap();
+        info!("已将帖子ID:{}加入processed_poi集合", id);
+    }
 }

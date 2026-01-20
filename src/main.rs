@@ -9,10 +9,10 @@ pub mod utils {
 struct Stroage {
     ticket_id: String,
     token: String,
-
 }
 
-use crate::utils::{identity, poi};
+use crate::utils::{identity, poi, posts::consume_poi};
+use ::futures::future::join_all;
 use dotenvy::dotenv;
 use log::{error, info};
 use reqwest::ClientBuilder;
@@ -26,7 +26,6 @@ async fn main() {
     let mut stroage = Stroage {
         ticket_id: "".to_string(),
         token: "".to_string(),
-       
     };
     let client = ClientBuilder::new()
         .timeout(Duration::from_secs(500))
@@ -63,7 +62,28 @@ async fn main() {
                 error!("清理挂了！")
             }
         };
-
-        tokio::time::sleep(Duration::from_secs(60)).await; //每轮loop结束后等待一分钟后开下一轮
+        //一次性创建两百个消费兴趣点的任务，并异步并发执行，你可以理解为开200个线程同时发请求，但性能消耗更低
+        let mut tasks = vec![];
+        for _ in {
+            let rpl = env::var("REQUEST_PER_LOOP")
+                .expect("请提供REQUEST_PER_LOOP")
+                .parse::<usize>()
+                .expect("REQUEST_PER_LOOP是整数！");
+            0..rpl
+        } {
+            tasks.push(consume_poi(
+                client.clone(),
+                stroage.clone(),
+                redis_client.clone(),
+            ));
+        }
+        join!(join_all(tasks));
+        tokio::time::sleep(Duration::from_secs({
+            env::var("LOOP_DELAY")
+                .expect("请提供LOOP_DELAY")
+                .parse::<u64>()
+                .expect("LOOP_DELAY是整数！")
+        }))
+        .await; //每轮loop结束后等待一分钟后开下一轮
     }
 }
