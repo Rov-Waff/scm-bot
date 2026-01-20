@@ -62,7 +62,6 @@ async fn main() {
                 error!("清理挂了！")
             }
         };
-        //一次性创建两百个消费兴趣点的任务，并异步并发执行，你可以理解为开200个线程同时发请求，但性能消耗更低
         let mut tasks = vec![];
         for _ in {
             let rpl = env::var("REQUEST_PER_LOOP")

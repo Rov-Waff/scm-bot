@@ -40,12 +40,25 @@ use crate::Stroage;
 
 */
 #[derive(Serialize, Deserialize, Debug)]
+/// API 返回的帖子简要结构（只包含当前需要的字段）
+///
+/// 字段:
+/// - `id`: 帖子 ID（字符串）
+/// - `title`: 帖子标题
+/// - `content`: 帖子内容（HTML）
 struct GetPostResponse {
     id: String,
     title: String,
     content: String,
 }
 
+/// 异步从 CodeMao API 获取帖子详情并尝试反序列化为 `GetPostResponse`。
+///
+/// - `client`: 已配置的 `reqwest::Client`。
+/// - `id`: 帖子 ID。
+/// - `stroage`: 包含授权 `token` 的存储引用。
+///
+/// 返回 `Some(GetPostResponse)` 表示成功，否则返回 `None`（请求或反序列化失败）。
 async fn get_post(
     client: Arc<Client>,
     id: u32,
@@ -88,6 +101,10 @@ async fn get_post(
     }
 }
 
+/// 从 Redis 的有序集合 `poi` 中弹出最小分数的一个帖子 ID，
+/// 获取帖子详情并执行消费逻辑；随后将该 ID 加入 `processed_poi`（带过期时间的分数）。
+///
+/// 注意：`ZPOPMIN` 在 redis-rs 中会返回 `(member, score)` 的元组，这里会解析 `member` 为 `u32`。
 pub(crate) async fn consume_poi(
     client: Arc<Client>,
     stroage: Arc<Mutex<Stroage>>,
