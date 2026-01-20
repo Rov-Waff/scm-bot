@@ -3,21 +3,21 @@ pub mod utils {
     pub mod identity;
     pub mod poi;
     pub mod posts; //帖子相关 //帖子兴趣点相关
+    pub mod redis; //Redis相关
 }
 
 struct Stroage {
     ticket_id: String,
     token: String,
-    poi: Vec<u32>,
-    processed_poi: Vec<u32>,
+
 }
 
 use crate::utils::{identity, poi};
 use dotenvy::dotenv;
-use log::info;
+use log::{error, info};
 use reqwest::ClientBuilder;
-use std::{env, sync::Arc, time::Duration, vec};
-use tokio::sync::Mutex;
+use std::{env, sync::Arc, time::Duration};
+use tokio::{join, sync::Mutex};
 
 #[tokio::main]
 async fn main() {
@@ -26,8 +26,7 @@ async fn main() {
     let mut stroage = Stroage {
         ticket_id: "".to_string(),
         token: "".to_string(),
-        poi: vec![],
-        processed_poi: vec![],
+       
     };
     let client = ClientBuilder::new()
         .timeout(Duration::from_secs(500))
@@ -48,9 +47,23 @@ async fn main() {
     let redis_client = Arc::new(Mutex::new(redis_client));
     loop {
         // 现在 `get_poi` 返回 `anyhow::Result<()>`，在此处 await 并记录错误
-        if let Err(e) = poi::get_poi(client.clone(), stroage.clone(),redis_client.clone()).await {
-            log::error!("get_poi failed: {:?}", e);
-        }
+        match join!(poi::get_poi(
+            client.clone(),
+            stroage.clone(),
+            redis_client.clone()
+        )) {
+            (Ok(_),) => {}
+            (Err(_),) => {
+                error!("不能获取！")
+            }
+        };
+        match join!(utils::redis::remove_expr_element(redis_client.clone())) {
+            (Ok(_),) => {}
+            (Err(_),) => {
+                error!("清理挂了！")
+            }
+        };
+
         tokio::time::sleep(Duration::from_secs(60)).await; //每轮loop结束后等待一分钟后开下一轮
     }
 }

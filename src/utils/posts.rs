@@ -74,13 +74,6 @@ async fn get_post(
     }
 }
 
-pub async fn consume_poi(client: Arc<Client>, stroage: Arc<Mutex<Stroage>>) {
-    let mut stro = stroage.lock().await;
-    for (i,j) in stro.poi.clone().iter().enumerate() {
-        //消费Post的逻辑
-
-        //添加进已处理的poi
-        let _ = &stro.processed_poi.push(*j);
-        let _ = &stro.poi.remove(i);
-    }
+pub async fn consume_poi(client: Arc<Client>, stroage: Arc<Mutex<Stroage>>,redis_client:Arc<Mutex<redis::Connection>>) {
+    
 }
