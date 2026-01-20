@@ -15,6 +15,7 @@ use crate::utils::{identity, poi, posts::consume_poi};
 use ::futures::future::join_all;
 use dotenvy::dotenv;
 use log::{error, info};
+use openai_api_rs::v1::api::OpenAIClientBuilder;
 use reqwest::ClientBuilder;
 use std::{env, sync::Arc, time::Duration};
 use tokio::{join, sync::Mutex};
@@ -44,6 +45,14 @@ async fn main() {
     let stroage = Arc::new(Mutex::new(stroage));
     let client = Arc::new(client);
     let redis_client = Arc::new(Mutex::new(redis_client));
+    let openai_client = Arc::new(Mutex::new(
+        OpenAIClientBuilder::new()
+            .with_api_key(env::var("OPENAI_API_KEY").expect("请提供OPENAI_API_KEY"))
+            .with_endpoint(env::var("OPEN_API_ENDPOINT").expect("请提供OPENAI_API_ENDPOINT"))
+            .build()
+            .expect("无法创建OpenAIClient"),
+    ));
+    //Loop
     loop {
         // 现在 `get_poi` 返回 `anyhow::Result<()>`，在此处 await 并记录错误
         match join!(poi::get_poi(
@@ -74,6 +83,7 @@ async fn main() {
                 client.clone(),
                 stroage.clone(),
                 redis_client.clone(),
+                openai_client.clone(),
             ));
         }
         join!(join_all(tasks));

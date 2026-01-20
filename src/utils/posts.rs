@@ -1,8 +1,13 @@
+use anyhow::{Error, Result};
 use log::{debug, error, info};
+use openai_api_rs::v1::{
+    api::OpenAIClient,
+    chat_completion::{self, chat_completion::ChatCompletionRequest},
+};
 use redis::TypedCommands;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use std::{env, sync::Arc};
 use tokio::sync::Mutex;
 
 use crate::Stroage;
@@ -109,13 +114,12 @@ pub(crate) async fn consume_poi(
     client: Arc<Client>,
     stroage: Arc<Mutex<Stroage>>,
     redis_client: Arc<Mutex<redis::Connection>>,
+    openai_client: Arc<Mutex<OpenAIClient>>,
 ) {
     let mut redis_client = redis_client.lock().await;
     //从poi这个ZSET中弹出一个元素，这个元素为帖子ID
     let id: Option<u32> = match redis_client.zpopmin("poi", 1) {
-        Ok(r) => r
-            .get(0)
-            .map(|entry| entry.parse::<u32>().unwrap()),
+        Ok(r) => r.get(0).map(|entry| entry.parse::<u32>().unwrap()),
         Err(e) => {
             error!("无法从poi集合中弹出元素，Error:{:?}", e);
             return;
@@ -123,10 +127,31 @@ pub(crate) async fn consume_poi(
     };
     match id {
         Some(id) => {
-            match get_post(client, id, stroage).await {
+            match get_post(client.clone(), id, stroage.clone()).await {
                 Some(post) => {
                     info!("获取到帖子:id:{},标题:{}", post.id, post.title);
                     //消费逻辑
+                    let prompt = format!(
+                        "请根据以下内容生成一个简短的回复，内容为中文，要求有帮助且有礼貌：\n标题:{}\n内容:{}",
+                        post.title, post.content
+                    );
+                    match request_openai(openai_client.clone(), prompt).await {
+                        Ok(reply) => {
+                            info!("针对帖子ID:{}生成的回复:{}", post.id, &reply);
+                            //TODO:添加将回复发布回猫站的逻辑
+                            match post_reply(client.clone(), id, &reply, stroage.clone()).await {
+                                Some(reply_id) => {
+                                    info!("已成功发布回复,帖子ID:{},回复ID:{}", post.id, reply_id);
+                                }
+                                None => {
+                                    error!("发布回复失败,帖子ID:{}", post.id);
+                                }
+                            }
+                        }
+                        Err(err) => {
+                            error!("请求OpenAI失败,Error:{:?}", err);
+                        }
+                    }
                 }
                 None => {
                     error!("无法获取帖子详情,id:{}", id);
@@ -148,5 +173,74 @@ pub(crate) async fn consume_poi(
             .zadd("processed_poi", id.to_string(), score)
             .unwrap();
         info!("已将帖子ID:{}加入processed_poi集合", id);
+    }
+}
+
+async fn request_openai(
+    openai_client: Arc<Mutex<OpenAIClient>>,
+    prompt: String,
+) -> Result<String, Error> {
+    let req = ChatCompletionRequest::new(
+        env::var("MODEL_NAME").expect("请提供MODEL_NAME"),
+        vec![chat_completion::ChatCompletionMessage {
+            role: chat_completion::MessageRole::user,
+            content: chat_completion::Content::Text(prompt),
+            name: None,
+            tool_calls: None,
+            tool_call_id: None,
+        }],
+    );
+    let mut client = openai_client.lock().await;
+    let result = client.chat_completion(req).await?;
+    Ok(result.choices[0]
+        .message
+        .content
+        .clone()
+        .unwrap_or("".to_string())
+        .to_string())
+}
+//URL:https://api.codemao.cn/web/forums/posts/1644028/replies
+//Method:POST
+//body:{"content":"<p style=\"text-align: left;\">前排</p>"}
+//response:{"id":"1879107"}
+
+async fn post_reply(
+    client: Arc<Client>,
+    id: u32,
+    content: &str,
+    stroage: Arc<Mutex<Stroage>>,
+) -> Option<u32> {
+    let stro = stroage.lock().await;
+    let body = serde_json::json!({
+        "content": content
+    });
+    match client
+        .post(format!(
+            "https://api.codemao.cn/web/forums/posts/{}/replies",
+            id
+        ))
+        .header("Cookie", format!("authorization={}", stro.token))
+        .json(&body)
+        .send()
+        .await
+    {
+        Ok(r) => match r.json::<serde_json::Value>().await {
+            Ok(r) => {
+                if let Some(reply_id) = r.get("id").and_then(|v| v.as_str()) {
+                    Some(reply_id.parse::<u32>().unwrap())
+                } else {
+                    error!("无法获取回复ID,id:{:?}", id);
+                    None
+                }
+            }
+            Err(e) => {
+                error!("无法序列化回复,id:{:?},Error:{:?}", id, e);
+                None
+            }
+        },
+        Err(_) => {
+            error!("无法发送回复请求,id:{:?}", id);
+            None
+        }
     }
 }
