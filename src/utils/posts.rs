@@ -7,7 +7,7 @@ use openai_api_rs::v1::{
 use redis::TypedCommands;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::{env, sync::Arc};
+use std::{env, sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 
 use crate::Stroage;
@@ -224,18 +224,31 @@ async fn post_reply(
         .send()
         .await
     {
-        Ok(r) => match r.json::<serde_json::Value>().await {
-            Ok(r) => {
-                if let Some(reply_id) = r.get("id").and_then(|v| v.as_str()) {
-                    Some(reply_id.parse::<u32>().unwrap())
-                } else {
-                    error!("无法获取回复ID,id:{:?}", id);
+        Ok(r) => {
+            let text = match r.text().await {
+                Ok(t) => t,
+                Err(e) => {
+                    error!("读取回复响应文本失败,id:{:?},Error:{:?}", id, e);
+                    "".to_string()
+                }
+            };
+            debug!("回复接口返回文本,id:{}, text: {}", id, text);
+            match serde_json::from_str::<serde_json::Value>(&text) {
+                Ok(v) => {
+                    if let Some(reply_id) = v.get("id").and_then(|v| v.as_str()) {
+                        info!("成功发布回复,id:{:?},回复ID:{}", id, reply_id);
+                        debug!("Sleep 45s强行延长持锁时间,id:{:?}", id);
+                        tokio::time::sleep(Duration::from_secs(45)).await;//Sleep 45s强行延长持锁时间
+                        Some(reply_id.parse::<u32>().unwrap())
+                    } else {
+                        error!("无法获取回复ID,id:{:?}", id);
+                        None
+                    }
+                }
+                Err(e) => {
+                    error!("无法序列化回复,id:{:?},Error:{:?}", id, e);
                     None
                 }
-            }
-            Err(e) => {
-                error!("无法序列化回复,id:{:?},Error:{:?}", id, e);
-                None
             }
         },
         Err(_) => {
@@ -243,4 +256,5 @@ async fn post_reply(
             None
         }
     }
+    
 }
