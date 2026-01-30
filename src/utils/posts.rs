@@ -7,7 +7,7 @@ use openai_api_rs::v1::{
 use redis::TypedCommands;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::{env, sync::Arc, time::Duration};
+use std::{env::{self, var}, sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 
 use crate::Stroage;
@@ -238,7 +238,7 @@ async fn post_reply(
                     if let Some(reply_id) = v.get("id").and_then(|v| v.as_str()) {
                         info!("成功发布回复,id:{:?},回复ID:{}", id, reply_id);
                         debug!("Sleep 45s强行延长持锁时间,id:{:?}", id);
-                        tokio::time::sleep(Duration::from_secs(45)).await;//Sleep 45s强行延长持锁时间
+                        tokio::time::sleep(Duration::from_secs(var("WAIT_TIME_PER_REQ").expect("请提供WAIT_TIME_PER_REQ环境变量").parse().expect("请提供整数"))).await;//Sleep 45s强行延长持锁时间
                         Some(reply_id.parse::<u32>().unwrap())
                     } else {
                         error!("无法获取回复ID,id:{:?}", id);
