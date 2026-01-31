@@ -55,6 +55,10 @@ struct GetPostResponse {
     id: String,
     title: String,
     content: String,
+    is_authorized:bool,
+    is_featured:bool,
+    is_hotted:bool,
+    is_pinned:bool,
 }
 
 /// 异步从 CodeMao API 获取帖子详情并尝试反序列化为 `GetPostResponse`。
@@ -131,8 +135,14 @@ pub(crate) async fn consume_poi(
                 Some(post) => {
                     info!("获取到帖子:id:{},标题:{}", post.id, post.title);
                     //消费逻辑
+                    //过滤置顶、加精、热门、已授权帖子
+                    if post.is_pinned || post.is_featured || post.is_hotted || post.is_authorized {
+                        info!("帖子ID:{}被过滤，跳过处理", post.id);
+                        return;
+                    }
+                    //调用OpenAI接口生成回复
                     let prompt = format!(
-                        "请根据以下内容生成一个简短的回复，内容为中文，要求有帮助且有礼貌：\n标题:{}\n内容:{}",
+                        "请扮演一位编程社区的用户，根据帖子内容生成对应的回复：\n标题:{}\n内容:{}",
                         post.title, post.content
                     );
                     match request_openai(openai_client.clone(), prompt).await {
