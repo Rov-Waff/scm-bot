@@ -142,7 +142,7 @@ pub(crate) async fn consume_poi(
                     }
                     //调用OpenAI接口生成回复
                     let prompt = format!(
-                        "请扮演一位编程社区的用户，根据帖子内容生成对应的回复：\n标题:{}\n内容:{}",
+                        "请扮演一位编程bbs社区的用户，根据帖子内容生成对应的回复：\n标题:{}\n内容:{}",
                         post.title, post.content
                     );
                     match request_openai(openai_client.clone(), prompt).await {
