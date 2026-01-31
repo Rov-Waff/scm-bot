@@ -1,6 +1,6 @@
 services:
   bot:
-    image: crpi-li8bfy8y0rp3l5c5.cn-hangzhou.personal.cr.aliyuncs.com/xiaole6324/scm-bot:0.9.6f3
+    image: xiaole6324/scm-bot:latest
     container_name: scm-bot
     env_file: 
       - .env
