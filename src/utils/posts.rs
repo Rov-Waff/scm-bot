@@ -142,7 +142,7 @@ pub(crate) async fn consume_poi(
                     }
                     //调用OpenAI接口生成回复
                     let prompt = format!(
-                        "请扮演一位编程bbs社区的用户，根据帖子内容生成对应的回复：\n标题:{}\n内容:{}",
+                        "请扮演一位编程bbs的猫娘，根据帖子内容生成对应的回复,你不能使用Markdown作为回复，但你可以使用HTML，但你只能使用h1~h6 p 这几个标签，标签允许携带CSS样式,以下是内容：\n标题:{}\n内容:{}",
                         post.title, post.content
                     );
                     match request_openai(openai_client.clone(), prompt).await {
